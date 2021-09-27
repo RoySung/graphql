@@ -54,6 +54,12 @@ type Client struct {
 	Log func(s string)
 }
 
+type RespWithExtensions struct {
+	Data       interface{}
+	Extensions interface{}
+	Errors     []map[string]interface{}
+}
+
 // NewClient makes a new Client capable of making GraphQL requests.
 func NewClient(endpoint string, opts ...ClientOption) *Client {
 	c := &Client{
@@ -78,7 +84,7 @@ func (c *Client) logf(format string, args ...interface{}) {
 // Pass in a nil response object to skip response parsing.
 // If the request fails or the server returns an error, the first error
 // will be returned.
-func (c *Client) Run(ctx context.Context, req *Request, resp interface{}) error {
+func (c *Client) Run(ctx context.Context, req *Request, resp *RespWithExtensions) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -93,7 +99,7 @@ func (c *Client) Run(ctx context.Context, req *Request, resp interface{}) error 
 	return c.runWithJSON(ctx, req, resp)
 }
 
-func (c *Client) runWithJSON(ctx context.Context, req *Request, resp interface{}) error {
+func (c *Client) runWithJSON(ctx context.Context, req *Request, resp *RespWithExtensions) error {
 	var requestBody bytes.Buffer
 	requestBodyObj := struct {
 		Query     string                 `json:"query"`
@@ -136,10 +142,11 @@ func (c *Client) runWithJSON(ctx context.Context, req *Request, resp interface{}
 	if err := json.NewDecoder(&buf).Decode(&resp); err != nil {
 		return errors.Wrap(err, "decoding response")
 	}
-	// if len(.Errors) > 0 {
-	// 	// return first error
-	// 	return gr.Errors[0]
-	// }
+	if len(resp.Errors) > 0 {
+		// return first error
+		jsondata, _ := json.Marshal(resp.Errors[0])
+		return errors.New(string(jsondata))
+	}
 	return nil
 }
 
